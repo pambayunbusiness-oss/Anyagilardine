@@ -1,75 +1,65 @@
 import logging
-import asyncio
-import pytz
 import requests
-import os
+import pytz
 from datetime import datetime
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 
 # --- KONFIGURASI ---
-# Gunakan Token Baru dari BotFather & API Key dari Screenshot
+# Token baru dari BotFather (Sudah di-Revoke)
 TOKEN = '8621903836:AAHpwi9UG3DzmMvRIGOUEINpRv90r2oz-7k'
+# API Key RapidAPI dari Screenshot kamu
 RAPID_API_KEY = '129f979654msh783082d7f6eab02p197906jsn7e1a5e01ed89'
 
-# Setup Logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Setup Logging agar muncul di Deploy Logs Railway
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 WIB = pytz.timezone('Asia/Jakarta')
 
-# Header untuk menghindari blokir
-HEADERS_BASE = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-}
-
-# --- HANDLER BOLA (REVISI SESUAI SCREENSHOT) ---
-async def get_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("Mencari jadwal bola... 🌍")
+# --- HANDLER BOLA ---
+async def get_bola(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    status_msg = await update.message.reply_text("⏳ Sedang mengambil jadwal bola...")
     
-    # URL sesuai API di screenshot kamu
+    # URL sesuai API "Free API Live Football Data" di screenshot kamu
     url = "https://free-api-live-football-data.p.rapidapi.com/football-get-all-matches-by-date"
-    
     headers = {
         "x-rapidapi-key": RAPID_API_KEY,
-        "x-rapidapi-host": "free-api-live-football-data.p.rapidapi.com",
-        **HEADERS_BASE
+        "x-rapidapi-host": "free-api-live-football-data.p.rapidapi.com"
     }
     
-    # API ini minta format tanggal YYYYMMDD (contoh: 20260326)
-    today_str = datetime.now(WIB).strftime('%Y%m%d')
+    # Format tanggal YYYYMMDD (Contoh: 20260326)
+    tgl_sekarang = datetime.now(WIB).strftime('%Y%m%d')
     
     try:
-        res = requests.get(url, headers=headers, params={"date": today_str}, timeout=25)
-        res.raise_for_status()
-        data = res.json()
+        response = requests.get(url, headers=headers, params={"date": tgl_sekarang}, timeout=15)
+        response.raise_for_status()
+        data = response.json()
         
         # Mengambil list pertandingan dari struktur API ini
         matches = data.get('response', {}).get('matches', [])
         
         if not matches:
-            await status_msg.edit_text(f"Tidak ada jadwal bola untuk tanggal {today_str}.")
+            await status_msg.edit_text(f"📭 Tidak ada jadwal bola untuk hari ini ({tgl_sekarang}).")
             return
+
+        msg = f"⚽ **Jadwal Bola ({tgl_sekarang})**\n\n"
+        for m in matches[:10]: # Batasi 10 pertandingan saja
+            league = m.get('league_name', 'Liga')
+            home = m.get('home_name', 'Tim A')
+            away = m.get('away_name', 'Tim B')
+            time = m.get('start_time', '--:--')
+            msg += f"🏆 {league}\n🥊 **{home}** vs **{away}**\n⏰ `{time}`\n---\n"
             
-        msg = f"⚽ **Jadwal Bola ({today_str})**\n\n"
-        # Ambil 10 pertandingan saja agar tidak terlalu panjang
-        for m in matches[:10]:
-            league = m.get('league_name', 'Unknown League')
-            home = m.get('home_name', 'Home')
-            away = m.get('away_name', 'Away')
-            time_start = m.get('start_time', '--:--')
-            
-            msg += f"🏆 {league}\n🥊 **{home}** vs **{away}**\n⏰ `{time_start}`\n---\n"
-        
         await status_msg.edit_text(msg, parse_mode='Markdown')
         
     except Exception as e:
         logger.error(f"Error Bola: {e}")
-        await status_msg.edit_text("⚠️ Gagal ambil data. Pastikan sudah klik 'Subscribe to Test' di RapidAPI.")
+        await status_msg.edit_text("⚠️ Gagal mengambil data bola. Cek status 'Subscribe' di RapidAPI.")
 
-# --- HANDLER ODDS (TETAP LANCAR) ---
+# --- HANDLER ODDS NBA ---
 async def get_odds(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("Cek Odds NBA... 🎰")
+    status_msg = await update.message.reply_text("🏀 Mengecek bursa NBA...")
     url = "https://api.the-odds-api.com/v4/sports/basketball_nba/odds/"
     params = {
         'apiKey': '635af92b5902de211d31a698e1ce2938',
@@ -78,33 +68,33 @@ async def get_odds(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'oddsFormat': 'decimal'
     }
     try:
-        res = requests.get(url, params=params, timeout=25)
+        res = requests.get(url, params=params, timeout=15)
         data = res.json()
         if not data:
-            await status_msg.edit_text("🎰 Odds belum tersedia.")
+            await status_msg.edit_text("🎰 Odds NBA belum tersedia.")
             return
-        msg = "🎰 **NBA Odds**\n\n"
-        for g in data[:8]:
-            msg += f"🏀 {g['away_team']} @ {g['home_team']}\n"
+
+        msg = "🎰 **NBA Odds (H2H)**\n\n"
+        for g in data[:5]:
+            msg += f"🔥 {g['away_team']} @ {g['home_team']}\n"
             if g['bookmakers']:
                 for o in g['bookmakers'][0]['markets'][0]['outcomes']:
                     msg += f"🔹 {o['name']}: `{o['price']}`\n"
             msg += "---\n"
         await status_msg.edit_text(msg, parse_mode='Markdown')
-    except Exception as e:
-        await status_msg.edit_text("⚠️ Gagal ambil data Odds.")
+    except:
+        await status_msg.edit_text("⚠️ Gagal mengambil data Odds.")
 
-# --- MAIN ---
-def main():
+# --- MENJALANKAN BOT ---
+if __name__ == '__main__':
+    # drop_pending_updates=True penting agar bot tidak tabrakan (Conflict)
     app = ApplicationBuilder().token(TOKEN).build()
     
-    app.add_handler(CommandHandler('start', lambda u, c: u.message.reply_text("Bot Aktif!\n/bola - Jadwal Bola\n/odds - Odds NBA")))
-    app.add_handler(CommandHandler('bola', get_football))
+    # Perintah Bot
+    app.add_handler(CommandHandler('start', lambda u, c: u.message.reply_text("Bot Aktif!\n\n/bola - Jadwal Bola\n/odds - Bursa NBA")))
+    app.add_handler(CommandHandler('bola', get_bola))
     app.add_handler(CommandHandler('odds', get_odds))
     
-    print("Bot berjalan di Railway...")
-    app.run_polling()
-
-if __name__ == '__main__':
-    main()
+    print("✅ Bot is running with the NEW TOKEN...")
+    app.run_polling(drop_pending_updates=True)
     
