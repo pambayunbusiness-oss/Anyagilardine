@@ -6,51 +6,50 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 
 # --- KONFIGURASI ---
-# Token baru yang baru saja kamu berikan
-TOKEN = '8621903836:AAGurbT4Qo-HE-qJmAWMhikdFy3V5m-14A0'
+# Token baru yang baru saja kamu revoke
+TOKEN = '8621903836:AAHePdX4K1KGTD9LENa_9pwxxlrOohRotWw'
 # API Key RapidAPI kamu
 RAPID_API_KEY = '129f979654msh783082d7f6eab02p197906jsn7e1a5e01ed89'
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 WIB = pytz.timezone('Asia/Jakarta')
 
-# --- HANDLER BOLA ---
+# --- HANDLER BOLA (Pencarian Pemain) ---
 async def get_bola(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("⏳ Sedang mengambil data pemain...")
+    status_msg = await update.message.reply_text("⏳ Sedang mencari data pemain...")
     
-    # URL sesuai API "Free API Live Football Data"
     url = "https://free-api-live-football-data.p.rapidapi.com/football-get-search-players"
     headers = {
         "x-rapidapi-key": RAPID_API_KEY,
         "x-rapidapi-host": "free-api-live-football-data.p.rapidapi.com"
     }
     
+    # Menggunakan parameter 'search' sesuai hasil tes 200 OK kamu
+    params = {"search": "mbappe"}
+    
     try:
-        # Mencari daftar pemain populer (mbappe sebagai contoh search)
-        res = requests.get(url, headers=headers, params={"query": "mbappe"}, timeout=15)
+        res = requests.get(url, headers=headers, params=params, timeout=15)
         res.raise_for_status()
         data = res.json()
         
-        # Mengambil list saran pemain dari struktur JSON yang kamu kirim
         suggestions = data.get('response', {}).get('suggestions', [])
         
         if not suggestions:
-            await status_msg.edit_text("📭 Tidak ada data ditemukan.")
+            await status_msg.edit_text("📭 Data tidak ditemukan.")
             return
 
-        msg = "⚽ **Daftar Pemain Populer**\n"
+        msg = "⚽ **Hasil Pencarian Pemain**\n"
         msg += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
         
-        # Ambil 10 pemain teratas
         for p in suggestions[:10]:
-            name = p.get('name', 'Unknown')
-            team = p.get('teamName', 'Tanpa Klub')
+            name = p.get('name', 'N/A')
+            team = p.get('teamName', 'Klub Tidak Diketahui')
             msg += f"👤 **{name}**\n🏟️ Klub: {team}\n⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
             
         await status_msg.edit_text(msg, parse_mode='Markdown')
     except Exception as e:
-        logging.error(f"Error Bola: {e}")
-        await status_msg.edit_text("⚠️ Gagal mengambil data. Pastikan bot di Railway sudah di-restart.")
+        logging.error(f"Error: {e}")
+        await status_msg.edit_text("⚠️ Gagal mengambil data. Pastikan Railway sudah di-restart.")
 
 # --- HANDLER ODDS ---
 async def get_odds(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -73,12 +72,13 @@ async def get_odds(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- MAIN ---
 if __name__ == '__main__':
-    # drop_pending_updates=True untuk membersihkan sisa tabrakan koneksi
+    # drop_pending_updates=True untuk membersihkan antrean pesan lama
     app = ApplicationBuilder().token(TOKEN).build()
     
     app.add_handler(CommandHandler('start', lambda u, c: u.message.reply_text("Bot Aktif!\n\n/bola - Cek Data Pemain\n/odds - Bursa NBA")))
     app.add_handler(CommandHandler('bola', get_bola))
     app.add_handler(CommandHandler('odds', get_odds))
     
-    print("✅ Bot is running with NEW REVOKED TOKEN...")
+    print("✅ Bot sedang berjalan dengan Token Baru & Parameter 'Search'...")
     app.run_polling(drop_pending_updates=True)
+        
