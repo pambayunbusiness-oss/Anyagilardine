@@ -9,89 +9,80 @@ RAPID_API_KEY = '129f979654msh783082d7f6eab02p197906jsn7e1a5e01ed89'
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Mapping ID Liga (Berdasarkan database Free API Live Football Data)
-# Jika ID berubah, kamu bisa mencarinya via endpoint 'football-get-all-leagues'
-LEAGUE_IDS = {
-    "premier": "94",      # Premier League
-    "laliga": "87",       # La Liga
-    "seria": "55",        # Serie A
-    "ucl": "42",          # UEFA Champions League
-    "bundesliga": "54"    # tambahan
-}
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "⚽ **Bot Jadwal Liga**\n\n"
-        "Gunakan perintah:\n"
-        "/next premier - Jadwal EPL\n"
-        "/next laliga - Jadwal La Liga\n"
-        "/next seria - Jadwal Serie A\n"
-        "/next ucl - Jadwal Champions League",
+        "⚽ **Bot Jadwal Pertandingan**\n\n"
+        "Ketik: `/next nama liga`\n"
+        "Contoh: `/next premier league` atau `/next la liga`",
         parse_mode='Markdown'
     )
 
 async def get_next_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Silakan masukkan nama liga. Contoh: `/next premier`", parse_mode='Markdown')
+    query = " ".join(context.args)
+    if not query:
+        await update.message.reply_text("Silakan masukkan nama liga. Contoh: `/next premier league`")
         return
 
-    league_input = context.args[0].lower()
-    league_id = LEAGUE_IDS.get(league_input)
+    status_msg = await update.message.reply_text(f"🔍 Mencari data untuk {query}...")
 
-    if not league_id:
-        await update.message.reply_text("Liga tidak terdaftar. Gunakan: premier, laliga, seria, atau ucl.")
-        return
-
-    status_msg = await update.message.reply_text(f"⏳ Mengambil jadwal mendatang {league_input}...")
-
-    # Endpoint untuk mengambil jadwal liga spesifik
-    url = "https://free-api-live-football-data.p.rapidapi.com/football-get-all-fixtures-by-league"
     headers = {
         "x-rapidapi-key": RAPID_API_KEY,
         "x-rapidapi-host": "free-api-live-football-data.p.rapidapi.com"
     }
-    params = {"leagueid": league_id}
 
     try:
-        res = requests.get(url, headers=headers, params=params, timeout=15)
-        data = res.json()
+        # STEP 1: Cari ID Liga berdasarkan nama yang kamu ketik
+        search_url = "https://free-api-live-football-data.p.rapidapi.com/football-get-search-all"
+        search_res = requests.get(search_url, headers=headers, params={"search": query}, timeout=15)
+        search_data = search_res.json()
         
-        # Mengambil list pertandingan mendatang (all_fixtures)
-        fixtures = data.get('response', {}).get('all_fixtures', [])
+        # Ambil ID liga pertama yang ditemukan
+        leagues = search_data.get('response', {}).get('leagues', [])
+        if not leagues:
+            await status_msg.edit_text(f"❌ Liga '{query}' tidak ditemukan. Coba nama lain.")
+            return
         
-        if not fixtures:
-            await status_msg.edit_text("Tidak ada jadwal mendatang yang ditemukan untuk liga ini.")
+        league_id = leagues[0].get('id')
+        league_name = leagues[0].get('name')
+
+        # STEP 2: Ambil Jadwal berdasarkan ID Liga tersebut
+        fixture_url = "https://free-api-live-football-data.p.rapidapi.com/football-get-all-fixtures-by-league"
+        fixture_res = requests.get(fixture_url, headers=headers, params={"leagueid": league_id}, timeout=15)
+        fixture_data = fixture_res.json()
+        
+        # Ambil list pertandingan
+        all_fixtures = fixture_data.get('response', {}).get('all_fixtures', [])
+        
+        if not all_fixtures:
+            await status_msg.edit_text(f"📅 Tidak ada jadwal mendatang untuk {league_name}.")
             return
 
-        msg = f"📅 **Jadwal Mendatang: {league_input.upper()}**\n"
+        msg = f"📅 **Jadwal Mendatang: {league_name}**\n"
         msg += "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
         
-        # Ambil 10 pertandingan mendatang (yang statusnya belum dimulai/NS)
+        # Filter pertandingan yang belum mulai (NS atau notstarted)
         count = 0
-        for f in fixtures:
-            status_type = f.get('status', {}).get('type', '')
-            if status_type == 'notstarted' or status_type == 'NS':
-                home = f.get('home', {}).get('name', 'Home')
-                away = f.get('away', {}).get('name', 'Away')
-                date_str = f.get('status', {}).get('reason', 'TBA') # Jam/Tanggal
+        for f in all_fixtures:
+            # Kita ambil pertandingan yang statusnya bukan 'finished'
+            status_type = f.get('status', {}).get('type', '').lower()
+            if status_type != 'finished':
+                home = f.get('home', {}).get('name')
+                away = f.get('away', {}).get('name')
+                date = f.get('status', {}).get('reason', 'TBA')
                 
-                msg += f"🏟️ **{home} vs {away}**\n⏰ {date_str}\n⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+                msg += f"🏟️ **{home} vs {away}**\n⏰ {date}\n⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
                 count += 1
-            
-            if count >= 10: break # Batasi 10 jadwal saja agar tidak kepanjangan
+            if count >= 8: break # Batasi 8 pertandingan agar tidak kena limit karakter Telegram
 
-        if count == 0:
-            await status_msg.edit_text("Semua pertandingan di matchday ini sudah selesai.")
-        else:
-            await status_msg.edit_text(msg, parse_mode='Markdown')
-            
+        await status_msg.edit_text(msg, parse_mode='Markdown')
+
     except Exception as e:
         logging.error(f"Error: {e}")
-        await status_msg.edit_text("⚠️ Gagal mengambil data. Cek limit API kamu.")
+        await status_msg.edit_text("⚠️ Gagal mengambil data. Pastikan kuota RapidAPI masih ada.")
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler('start', start))
-    app.add_handler(CommandHandler('next', get_next_match)) # Menggunakan /next
+    app.add_handler(CommandHandler('next', get_next_match))
     app.run_polling(drop_pending_updates=True)
     
