@@ -12,7 +12,7 @@ from nba_api.stats.endpoints import scoreboardv2
 
 # --- KONFIGURASI ---
 # Token dan API Key tetap sama
-TOKEN = '8621903836:AAG1frcKUzC0y110Cuf5r2fbOXM2GozEqDI'
+TOKEN = '8621903836:AAHpwi9UG3DzmMvRIGOUEINpRv90r2oz-7k'
 FOOTBALL_API_KEY = '129f979654msh783082d7f6eab02p197906jsn7e1a5e01ed89'
 ODDS_API_KEY = '635af92b5902de211d31a698e1ce2938'
 
