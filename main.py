@@ -11,7 +11,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 from nba_api.stats.endpoints import scoreboardv2
 
 # --- KONFIGURASI ---
-# Token dan API Key tetap sama
+# Token Telegram dan API Keys Anda
 TOKEN = '8621903836:AAHpwi9UG3DzmMvRIGOUEINpRv90r2oz-7k'
 FOOTBALL_API_KEY = '129f979654msh783082d7f6eab02p197906jsn7e1a5e01ed89'
 ODDS_API_KEY = '635af92b5902de211d31a698e1ce2938'
@@ -22,12 +22,13 @@ logger = logging.getLogger(__name__)
 
 WIB = pytz.timezone('Asia/Jakarta')
 
-# Header User-Agent standar
+# Header standar untuk menghindari blokir firewall
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'application/json'
 }
 
-# --- FUNGSI NBA ---
+# --- FUNGSI BANTU ---
 def convert_nba_to_wib(game_status_text):
     if "ET" not in game_status_text:
         return game_status_text
@@ -59,7 +60,7 @@ async def get_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
         fixtures = res.json().get('response', [])
         
         if not fixtures:
-            await status_msg.edit_text(f"Tidak ada jadwal bola untuk hari ini ({today}).")
+            await status_msg.edit_text(f"Tidak ada jadwal bola hari ini ({today}).")
             return
             
         priority = [1, 2, 3, 4, 5, 39, 140, 61, 78, 135, 10, 132]
@@ -75,21 +76,20 @@ async def get_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.edit_text(msg, parse_mode='Markdown')
     except Exception as e:
         logger.error(f"Error Bola: {e}")
-        await status_msg.edit_text("⚠️ Gagal mengambil data bola. Pastikan API Key RapidAPI aktif.")
+        await status_msg.edit_text("⚠️ Gagal mengambil data bola. Periksa kuota API atau status langganan RapidAPI Anda.")
 
 # --- HANDLER NBA ---
 async def get_nba(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_msg = await update.message.reply_text("Mengecek NBA... 🏀")
     try:
         today = datetime.now(WIB).strftime('%Y-%m-%d')
-        # Menambahkan header khusus agar tidak diblokir oleh NBA
         board = scoreboardv2.ScoreboardV2(game_date=today, header_values=HEADERS)
         data_dict = board.get_dict()
         games = data_dict['resultSets'][0]['rowSet']
         lines = data_dict['resultSets'][1]['rowSet']
         
         if not games:
-            await status_msg.edit_text(f"Tidak ada jadwal NBA hari ini ({today}).")
+            await status_msg.edit_text(f"Tidak ada NBA hari ini ({today}).")
             return
             
         msg = f"🏀 **NBA ({today})**\n\n"
@@ -100,7 +100,7 @@ async def get_nba(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status_msg.edit_text(msg, parse_mode='Markdown')
     except Exception as e:
         logger.error(f"Error NBA: {e}")
-        await status_msg.edit_text("⚠️ Gagal mengambil data NBA. Server NBA mungkin sedang sibuk.")
+        await status_msg.edit_text("⚠️ Gagal mengambil data NBA. Server NBA mungkin sedang membatasi akses (Rate Limit).")
 
 # --- HANDLER ODDS ---
 async def get_odds(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -117,7 +117,7 @@ async def get_odds(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = res.json()
         
         if not data:
-            await status_msg.edit_text("🎰 Odds belum tersedia.")
+            await status_msg.edit_text("🎰 Odds belum tersedia untuk saat ini.")
             return
 
         msg = "🎰 **NBA Odds (Dibatasi 10)**\n\n"
@@ -142,10 +142,11 @@ def main():
         app.add_handler(CommandHandler('nba', get_nba))
         app.add_handler(CommandHandler('odds', get_odds))
         
-        print("Bot berjalan di Cloud (Railway)...")
+        print("Bot berjalan stabil di Cloud Railway...")
         app.run_polling(poll_interval=2.0)
     except Exception as e:
         logger.critical(f"CRITICAL ERROR: {e}")
 
 if __name__ == '__main__':
     main()
+    
