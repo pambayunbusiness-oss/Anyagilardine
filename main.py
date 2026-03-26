@@ -1,11 +1,10 @@
 import os
 import logging
 import requests
-import datetime
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 
-# 1. Konfigurasi API dari Railway
+# 1. Konfigurasi
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_KEY = os.getenv("RAPIDAPI_KEY")
 API_HOST = "api-football-v1.p.rapidapi.com"
@@ -13,62 +12,54 @@ API_HOST = "api-football-v1.p.rapidapi.com"
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 Bot Jadwal Bola Aktif!\n\n"
-        "Gunakan perintah:\n"
-        "⚽ /jadwal - Cek pertandingan LIVE & Jadwal hari ini"
-    )
+    await update.message.reply_text("⚽ Bot Jadwal Bola Aktif! Ketik /jadwal")
 
 async def get_jadwal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Ambil tanggal hari ini (Waktu Indonesia)
-    today = datetime.datetime.now().strftime('%Y-%m-%d')
-    
     headers = {
         "X-RapidAPI-Key": API_KEY,
         "X-RapidAPI-Host": API_HOST
     }
 
     try:
-        # STEP 1: Cek yang sedang LIVE
-        res_live = requests.get(f"https://{API_HOST}/v3/fixtures", headers=headers, params={"live": "all"})
-        data_live = res_live.json().get("response", [])
+        # KITA PAKAI ENDPOINT PALING AMAN: 50 Pertandingan Terdekat (Live/Mendatang)
+        url = f"https://{API_HOST}/v3/fixtures"
+        # Kita ambil 15 pertandingan terdekat secara umum tanpa filter tanggal kaku
+        params = {"next": "15", "timezone": "Asia/Jakarta"}
+        
+        response = requests.get(url, headers=headers, params=params)
+        data = response.json()
+        
+        fixtures = data.get("response", [])
+        
+        if not fixtures:
+            await update.message.reply_text("ℹ️ Sedang tidak ada jadwal pertandingan di database.")
+            return
 
-        # STEP 2: Ambil semua jadwal HARI INI
-        res_today = requests.get(f"https://{API_HOST}/v3/fixtures", headers=headers, params={"date": today, "timezone": "Asia/Jakarta"})
-        data_today = res_today.json().get("response", [])
-
-        pesan = ""
-
-        # Tampilkan yang LIVE dulu jika ada
-        if data_live:
-            pesan += "🔴 *SEDANG BERLANGSUNG (LIVE):*\n"
-            for m in data_live[:5]:
-                h, a = m['teams']['home']['name'], m['teams']['away']['name']
-                gh, ga = m['goals']['home'], m['goals']['away']
-                pesan += f"• {h} ({gh}) vs ({ga}) {a}\n"
-            pesan += "\n"
-
-        # Tampilkan jadwal hari ini
-        if data_today:
-            pesan += f"📅 *JADWAL HARI INI ({today}):*\n"
-            # Filter yang belum mulai (NS = Not Started)
-            upcoming = [m for m in data_today if m['fixture']['status']['short'] == "NS"]
+        pesan = "🏆 *Jadwal Pertandingan Terdekat:* \n\n"
+        
+        for m in fixtures:
+            home = m['teams']['home']['name']
+            away = m['teams']['away']['name']
+            liga = m['league']['name']
+            waktu = m['fixture']['date'][11:16] # Jam:Menit
+            status = m['fixture']['status']['short']
             
-            if not upcoming and not data_live:
-                pesan = "ℹ️ Semua pertandingan hari ini sudah selesai."
+            # Jika sedang LIVE
+            if status in ["1H", "2H", "HT"]:
+                score_h = m['goals']['home']
+                score_a = m['goals']['away']
+                pesan += f"🔴 *LIVE* | {home} ({score_h}) vs ({score_a}) {away}\n"
+            # Jika belum mulai
             else:
-                for m in upcoming[:10]:
-                    jam = m['fixture']['date'][11:16] # Ambil jam HH:mm
-                    h, a = m['teams']['home']['name'], m['teams']['away']['name']
-                    pesan += f"⏰ {jam} WIB: {h} vs {a}\n"
-        else:
-            if not pesan: pesan = "ℹ️ Tidak ada jadwal pertandingan untuk hari ini."
-
+                pesan += f"⏰ {waktu} WIB | {home} vs {away}\n"
+            
+            pesan += f"   _{liga}_\n---\n"
+            
         await update.message.reply_text(pesan, parse_mode='Markdown')
 
     except Exception as e:
         logging.error(f"Error: {e}")
-        await update.message.reply_text("⚠️ Gagal mengambil data. Coba lagi nanti.")
+        await update.message.reply_text("⚠️ Terjadi gangguan koneksi ke server API.")
 
 if __name__ == '__main__':
     if not TOKEN:
@@ -77,6 +68,6 @@ if __name__ == '__main__':
         app = ApplicationBuilder().token(TOKEN).build()
         app.add_handler(CommandHandler('start', start))
         app.add_handler(CommandHandler('jadwal', get_jadwal))
-        print("✅ Bot Final Revision is Running...")
+        print("✅ Bot Terkoneksi!")
         app.run_polling()
-                     
+        
