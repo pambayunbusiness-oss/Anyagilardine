@@ -1,1 +1,1 @@
-worker: python main.py & python football.py
+worker: python run_all.py
