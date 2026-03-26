@@ -1,1 +1,2 @@
-worker: python main.py & python football.py & wait
+worker: python main.py
+Worker:python football.py
