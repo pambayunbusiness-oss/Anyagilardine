@@ -1,4 +1,3 @@
 python-telegram-bot
 requests
-pytz
-nba_api
+python-dotenv
