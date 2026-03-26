@@ -5,108 +5,122 @@ import pytz
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 
-# --- KONFIGURASI ---
+# --- KONFIGURASI API ---
 TOKEN = '8621903836:AAHePdX4K1KGTD9LENa_9pwxxlrOohRotWw'
 RAPID_API_KEY = '129f979654msh783082d7f6eab02p197906jsn7e1a5e01ed89'
 
-# Host sesuai dokumentasi yang kamu kirim
-SPORTS_INFO_HOST = "sports-information.p.rapidapi.com"
+# Host API
+HOST_SPORTS_INFO = "sports-information.p.rapidapi.com"
+HOST_FOOTBALL = "api-football-v1.p.rapidapi.com"
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
+# Mapping ID Liga untuk Football (API-Football)
+FOOTBALL_LEAGUES = {
+    "ucl": 2,
+    "premier": 39,
+    "laliga": 140,
+    "seriea": 135,
+    "bundesliga": 78
+}
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🏀🏈⚽ **Bot Sports Information Aktif!**\n\n"
-        "Gunakan perintah berikut:\n"
-        "• `/nba` - Jadwal NBA Terbaru\n"
-        "• `/ncaa` - Jadwal Basketball Kampus (NCAA)\n"
-        "• `/news` - Berita Sports Terkini\n"
-        "• `/next ucl` - Jadwal Bola Eropa (API-Football)",
+        "🏀⚽ **Sports Schedule Bot**\n\n"
+        "**Perintah NBA:**\n"
+        "• `/nba` - Jadwal NBA hari ini\n\n"
+        "**Perintah Football:**\n"
+        "• `/next ucl` - Jadwal Champions League\n"
+        "• `/next premier` - Jadwal Liga Inggris\n"
+        "• `/next laliga` - Jadwal Liga Spanyol",
         parse_mode='Markdown'
     )
 
-# --- FUNGSI NBA (Berdasarkan Dokumentasi Baru) ---
+# --- 1. FUNGSI JADWAL NBA (Sports Information API) ---
 async def get_nba(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("🏀 Mengambil data NBA...")
+    status_msg = await update.message.reply_text("⏳ Mengambil jadwal NBA...")
     
-    # Endpoint sesuai dokumentasi: /nba/schedule
-    url = f"https://{SPORTS_INFO_HOST}/nba/schedule"
-    
-    # Mengambil tanggal hari ini (WIB)
     tz = pytz.timezone('Asia/Jakarta')
     now = datetime.now(tz)
     
+    # Endpoint & Params sesuai snippet berbayarmu
+    url = f"https://{HOST_SPORTS_INFO}/nba/schedule"
     params = {
-        "year": now.strftime('%Y'),
-        "month": now.strftime('%m'),
-        "day": now.strftime('%d')
+        "year": now.strftime("%Y"),
+        "month": now.strftime("%m"),
+        "day": now.strftime("%d")
     }
-    
     headers = {
         "x-rapidapi-key": RAPID_API_KEY,
-        "x-rapidapi-host": SPORTS_INFO_HOST
+        "x-rapidapi-host": HOST_SPORTS_INFO
     }
 
     try:
         res = requests.get(url, headers=headers, params=params, timeout=15)
         data = res.json()
-        
-        # Berdasarkan dokumentasi, response biasanya berupa list pertandingan
-        if not data:
-            await status_msg.edit_text(f"📅 Tidak ada jadwal NBA untuk tanggal {params['day']}-{params['month']}.")
+
+        if not data or len(data) == 0:
+            await status_msg.edit_text(f"📅 Tidak ada pertandingan NBA untuk hari ini ({now.strftime('%d %b')}).")
             return
 
-        msg = f"🏀 **Jadwal NBA ({params['day']}/{params['month']})**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        
-        # Ambil maksimal 10 game
+        msg = f"🏀 **NBA Schedule ({now.strftime('%d %b %Y')})**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
         for g in data[:10]:
-            # Struktur umum API ini biasanya menggunakan 'name' atau 'shortName'
-            game_name = g.get('name', 'Pertandingan NBA')
+            name = g.get('name', 'NBA Game')
+            # Ambil status (Live/Scheduled/Finished)
             status = g.get('status', {}).get('type', {}).get('description', 'Scheduled')
-            
-            msg += f"🏟️ **{game_name}**\n⏰ Status: {status}\n⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-
+            msg += f"🏟️ **{name}**\n⏰ Status: {status}\n⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        
         await status_msg.edit_text(msg, parse_mode='Markdown')
-    except Exception as e:
-        await status_msg.edit_text(f"⚠️ Error NBA API: Hubungi admin.")
+    except:
+        await status_msg.edit_text("⚠️ Gagal terhubung ke API NBA.")
 
-# --- FUNGSI BERITA (Berdasarkan Dokumentasi Baru) ---
-async def get_news(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("📰 Mengambil berita terbaru...")
+# --- 2. FUNGSI JADWAL FOOTBALL (API-Football) ---
+async def get_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Gunakan: `/next ucl` atau `/next premier`")
+        return
     
-    # Endpoint sesuai dokumentasi: /nba/news
-    url = f"https://{SPORTS_INFO_HOST}/nba/news"
-    params = {"limit": "5"}
+    league_name = context.args[0].lower()
+    league_id = FOOTBALL_LEAGUES.get(league_name)
+
+    if not league_id:
+        await update.message.reply_text("❌ Liga tidak dikenal. Gunakan: ucl, premier, laliga, seriea.")
+        return
+
+    status_msg = await update.message.reply_text(f"⚽ Mencari jadwal {league_name.upper()}...")
+    
+    url = f"https://{HOST_FOOTBALL}/v3/fixtures"
     headers = {
         "x-rapidapi-key": RAPID_API_KEY,
-        "x-rapidapi-host": SPORTS_INFO_HOST
+        "x-rapidapi-host": HOST_FOOTBALL
     }
+    params = {"league": league_id, "next": "8"}
 
     try:
         res = requests.get(url, headers=headers, params=params, timeout=15)
-        news_list = res.json()
+        fixtures = res.json().get('response', [])
 
-        msg = "📰 **BERITA TERPOPULER**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        for item in news_list:
-            headline = item.get('headline', 'No Title')
-            description = item.get('description', '')
-            msg += f"🔥 **{headline}**\n_{description[:100]}..._\n⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        msg = f"⚽ **Jadwal {league_name.upper()} (WIB)**\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        for f in fixtures:
+            home = f['teams']['home']['name']
+            away = f['teams']['away']['name']
+            # Konversi waktu ke WIB
+            date_utc = datetime.strptime(f['fixture']['date'], "%Y-%m-%dT%H:%M:%S%z")
+            date_wib = date_utc.astimezone(pytz.timezone('Asia/Jakarta')).strftime('%d %b, %H:%M')
             
+            msg += f"🏟️ **{home} vs {away}**\n⏰ {date_wib} WIB\n⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
+        
         await status_msg.edit_text(msg, parse_mode='Markdown')
     except:
-        await status_msg.edit_text("⚠️ Gagal mengambil berita.")
-
-# --- FUNGSI BOLA (Tetap menggunakan API-Football karena lebih lengkap untuk Eropa) ---
-async def get_football(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # (Kode fungsi football tetap sama dengan sebelumnya)
-    pass
+        await status_msg.edit_text("⚠️ Gagal terhubung ke API Football.")
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
+    
     app.add_handler(CommandHandler('start', start))
     app.add_handler(CommandHandler('nba', get_nba))
-    app.add_handler(CommandHandler('news', get_news))
-    # Tambahkan handler lain sesuai kebutuhan
+    app.add_handler(CommandHandler('next', get_football))
     
-    print("✅ Bot NBA Sports Info Siap!")
+    print("✅ Bot NBA & Football Berjalan...")
     app.run_polling()
+                
