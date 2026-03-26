@@ -1,0 +1,24 @@
+# 1. KEAMANAN (Sangat Penting!)
+.env
+secret.txt
+token.py
+
+# 2. PYTHON (File Sampah/Sistem)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 3. VIRTUAL ENVIRONMENT (Folder Library)
+venv/
+env/
+.venv/
+build/
+dist/
+
+# 4. LOGS & DATABASE
+*.log
+*.sqlite3
+
+# 5. OS (Sistem Operasi)
+.DS_Store
+Thumbs.db
