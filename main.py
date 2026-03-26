@@ -13,16 +13,10 @@ API_HOST = "sports-information.p.rapidapi.com"
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🏀 *Bot Jadwal NBA Aktif!* Ketik /jadwal")
+    await update.message.reply_text("🏀 *Bot NBA Online!*\nKetik /jadwal untuk cek jadwal terbaru.", parse_mode='Markdown')
 
 async def get_jadwal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    now = datetime.datetime.now()
-    params = {
-        "year": now.strftime('%Y'),
-        "month": now.strftime('%m'),
-        "day": now.strftime('%d')
-    }
-    
+    # Kita coba ambil jadwal bulan ini (Maret 2026)
     headers = {
         "X-RapidAPI-Key": API_KEY,
         "X-RapidAPI-Host": API_HOST
@@ -30,48 +24,54 @@ async def get_jadwal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         url = f"https://{API_HOST}/nba/schedule"
+        # Berdasarkan log kamu, kita minta data bulan Maret 2026
+        params = {"year": "2026", "month": "03", "day": "26"}
+        
         response = requests.get(url, headers=headers, params=params)
         data = response.json()
-        
-        # DEBUG: Muncul di Logs Railway untuk kita cek struktur aslinya
-        print(f"DEBUG DATA TYPE: {type(data)}")
-        print(f"DEBUG FULL DATA: {data}")
 
-        # LOGIKA PERBAIKAN:
-        # Jika data berupa list, pakai langsung. Jika dictionary, cari kunci 'games' atau 'data'
+        # LOGIKA PARSING BERDASARKAN SCREENSHOT KAMU
         fixtures = []
         if isinstance(data, list):
             fixtures = data
         elif isinstance(data, dict):
-            fixtures = data.get('games', data.get('data', []))
+            # API NBA kamu sering membungkus di 'leagueSchedule' atau langsung di root
+            fixtures = data.get('leagueSchedule', data.get('games', []))
+            if not fixtures and not isinstance(data, list):
+                # Jika data adalah dict tunggal (satu pertandingan), jadikan list
+                fixtures = [data] if 'homeTeam' in data else []
 
-        if not fixtures:
-            await update.message.reply_text(f"ℹ️ Tidak ada jadwal NBA untuk hari ini ({params['day']}/{params['month']}).")
+        if not fixtures or (isinstance(fixtures, list) and len(fixtures) == 0):
+            await update.message.reply_text("ℹ️ Tidak ada jadwal NBA ditemukan untuk hari ini di database.")
             return
 
-        pesan = f"🏀 *Jadwal NBA ({params['day']}/{params['month']}):*\n\n"
+        pesan = "🏀 *Jadwal NBA Terbaru:* \n\n"
         
-        for game in fixtures[:15]:
-            # Ambil data dengan aman menggunakan .get()
-            away = game.get('awayTeam', 'Unknown')
-            home = game.get('homeTeam', 'Unknown')
-            waktu = game.get('time', game.get('gameTime', 'TBA'))
-
-            pesan += f"🏀 {away} vs {home}\n"
-            pesan += f"⏰ Jam: {waktu}\n"
+        for game in fixtures[:10]:
+            # Mengambil data sesuai log: homeTeam, awayTeam, dan status
+            home = game.get('homeTeam', 'Team A')
+            away = game.get('awayTeam', 'Team B')
+            # Ambil status atau waktu
+            status = game.get('status', {}).get('description', 'Scheduled')
+            waktu = game.get('startTimeUTC', game.get('time', 'TBA'))
+            
+            # Format tampilan
+            pesan += f"🏀 *{away}* @ *{home}*\n"
+            pesan += f"🕒 {waktu}\n"
+            pesan += f"📝 Status: {status}\n"
             pesan += "────────────────────\n"
             
         await update.message.reply_text(pesan, parse_mode='Markdown')
 
     except Exception as e:
         logging.error(f"Error: {e}")
-        await update.message.reply_text(f"⚠️ Gagal memproses data.\nSaran: Cek Logs Railway bagian 'DEBUG FULL DATA'.")
+        await update.message.reply_text("⚠️ Gagal memproses data NBA. Coba lagi nanti.")
 
 if __name__ == '__main__':
     if TOKEN and API_KEY:
         app = ApplicationBuilder().token(TOKEN).build()
         app.add_handler(CommandHandler('start', start))
         app.add_handler(CommandHandler('jadwal', get_jadwal))
-        print("🚀 Bot NBA Berjalan...")
+        print("🚀 Bot NBA Siap Tempur!")
         app.run_polling()
-    
+        
