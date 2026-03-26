@@ -1,1 +1,2 @@
-worker: python run_all.py
+worker: python main.py & python football.py & wait
+
