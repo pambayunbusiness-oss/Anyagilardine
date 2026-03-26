@@ -1,3 +1,3 @@
-python-telegram-bot
+nba api
+pandas
 requests
-python-dotenv
