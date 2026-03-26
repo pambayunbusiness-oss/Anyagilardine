@@ -2,19 +2,24 @@ import subprocess
 import sys
 import time
 
-# Menjalankan bot NBA (main.py)
-p1 = subprocess.Popen([sys.executable, "main.py"])
-print("Memulai Bot NBA...")
+# Jalankan Bot NBA
+proc1 = subprocess.Popen([sys.executable, "main.py"])
+print("Bot NBA dimulai...")
 
-# Menjalankan bot Bola (football.py)
-p2 = subprocess.Popen([sys.executable, "football.py"])
-print("Memulai Bot Bola...")
+# Jalankan Bot Bola
+proc2 = subprocess.Popen([sys.executable, "football.py"])
+print("Bot Bola dimulai...")
 
-# Menjaga agar script utama tetap hidup selama bot berjalan
+# Jaga agar script tetap hidup
 try:
-    p1.wait()
-    p2.wait()
+    while True:
+        time.sleep(10)
+        # Cek jika ada proses yang mati, lalu restart jika perlu
+        if proc1.poll() is not None:
+            proc1 = subprocess.Popen([sys.executable, "main.py"])
+        if proc2.poll() is not None:
+            proc2 = subprocess.Popen([sys.executable, "football.py"])
 except KeyboardInterrupt:
-    p1.terminate()
-    p2.terminate()
-  
+    proc1.terminate()
+    proc2.terminate()
+    
