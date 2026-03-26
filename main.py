@@ -7,7 +7,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 # 1. Konfigurasi
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_KEY = os.getenv("RAPIDAPI_KEY")
-API_HOST = "sports-information.p.rapidapi.com"
+API_HOST = "api-nba-v1.p.rapidapi.com"
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
