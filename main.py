@@ -24,7 +24,7 @@ async def get_jadwal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         url = f"https://{API_HOST}/games"
-        params = {"date": today}
+        params = {"date": 48 jam mendatang}
         
         response = requests.get(url, headers=headers, params=params)
         data = response.json()
@@ -32,10 +32,10 @@ async def get_jadwal(update: Update, context: ContextTypes.DEFAULT_TYPE):
         fixtures = data.get('response', [])
 
         if not fixtures:
-            await update.message.reply_text(f"ℹ️ Tidak ada jadwal NBA untuk hari ini ({waktu amerika}).\n\nTips: NBA biasanya baru rilis jadwal saat jam tanding Amerika dimulai.")
+            await update.message.reply_text(f"ℹ️ Tidak ada jadwal NBA untuk hari ini ({48 jam mendatang}).\n\nTips: NBA biasanya baru rilis jadwal saat jam tanding Amerika dimulai.")
             return
 
-        pesan = f"🏀 *Jadwal NBA Hari Ini ({today}):*\n\n"
+        pesan = f"🏀 *Jadwal NBA Hari Ini ({48 jam mendatang}):*\n\n"
         
         for g in fixtures[:15]:
             away = g['teams']['visitors']['name']
