@@ -87,10 +87,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 if __name__ == '__main__':
-    TOKEN = os.getenv("TELEGRAM_TOKEN_BOLA")
+    TOKEN = os.getenv("TOKEN_TELEGRAM_BOLA")
     
     if not TOKEN:
-        logging.error("Variabel TELEGRAM_TOKEN_BOLA tidak ditemukan!")
+        logging.error("Variabel TOKEN_TELEGRAM_BOLA tidak ditemukan!")
     else:
         app = ApplicationBuilder().token(TOKEN).build()
         
