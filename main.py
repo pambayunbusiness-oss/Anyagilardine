@@ -1,90 +1,95 @@
 import os
+import requests
+import datetime
 import logging
-from datetime import datetime, timedelta
-import pytz # Untuk mengatur zona waktu
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
-from nba_api.live.nba.endpoints import scoreboard
 
-# Logging
+# Logging untuk pantau di Railway
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-def get_nba_data(target_date=None):
-    """
-    Mengambil data NBA. Jika target_date None, ambil data live (today).
-    Jika target_date diisi, ambil jadwal untuk tanggal tersebut.
-    """
-    try:
-        # Scoreboard live untuk hari ini
-        sb = scoreboard.ScoreBoard()
-        data = sb.get_dict()
-        games = data['scoreboard']['games']
-        display_date = data['scoreboard']['gameDate']
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+API_KEY = os.getenv("RAPIDAPI_KEY")
 
-        # Filter manual jika user meminta 'tomorrow' 
-        # (Catatan: nba_api live endpoint biasanya fokus pada game hari ini)
-        # Jika ingin jadwal masa depan yang lebih akurat, kita gunakan status tanggal.
-        
-        if not games:
-            return f"📅 *NBA Update ({display_date})*\n\nTidak ada pertandingan yang dijadwalkan."
-
-        res = f"🏀 *NBA Schedule/Scores ({display_date})*\n"
-        res += "----------------------------------\n\n"
-        
-        for game in games:
-            home_team = game['homeTeam']['teamName']
-            home_score = game['homeTeam']['score']
-            away_team = game['awayTeam']['teamName']
-            away_score = game['awayTeam']['score']
-            status = game['gameStatusText']
-
-            away_icon = "🏆 " if away_score > home_score and "Final" in status else ""
-            home_icon = "🏆 " if home_score > away_score and "Final" in status else ""
-
-            res += f"🕒 *Status:* `{status}`\n"
-            res += f"{away_icon}*Away:* {away_team} ({away_score})\n"
-            res += f"{home_icon}*Home:* {home_team} ({home_score})\n"
-            res += "----------------------------------\n"
-            
-        return res
-    except Exception as e:
-        logging.error(f"Error: {e}")
-        return "⚠️ Gagal mengambil data. Coba lagi nanti."
-
-# Handler Today
-async def nba_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Mengambil jadwal & skor HARI INI...")
-    # Secara default nba_api.live mengambil game yang sedang aktif/hari ini
-    reply = get_nba_data() 
-    await update.message.reply_text(reply, parse_mode='Markdown')
-
-# Handler Tomorrow
-async def nba_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📅 Fitur jadwal besok sedang dioptimalkan...")
-    # Karena live endpoint terbatas pada 'current board', 
-    # bot akan menginfokan jika jadwal besok belum dirilis oleh API.
-    reply = get_nba_data() 
-    await update.message.reply_text(f"Info: Data besok biasanya muncul setelah pertandingan hari ini selesai.\n\n{reply}", parse_mode='Markdown')
+# Host untuk masing-masing cabang
+NBA_HOST = "api-nba-v1.p.rapidapi.com"
+FOOTBALL_HOST = "api-football-v1.p.rapidapi.com"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Selamat datang! Gunakan perintah:\n"
-        "/nba_today - Skor & jadwal hari ini\n"
-        "/nba_tomorrow - Jadwal besok"
+        "⚽🏀 *Bot NBA & Bola v1.0*\n\n"
+        "Gunakan perintah:\n"
+        "/jadwal - Cek NBA hari ini\n"
+        "/bola - Cek Liga Top Eropa hari ini",
+        parse_mode='Markdown'
     )
 
-if __name__ == '__main__':
-    TOKEN = os.getenv("TELEGRAM_TOKEN")
+# --- FUNGSI JADWAL NBA ---
+async def get_nba(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    target_date = datetime.datetime.now().strftime('%Y-%m-%d')
+    headers = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": NBA_HOST}
+    params = {"date": target_date, "timezone": "Asia/Jakarta"}
     
-    if not TOKEN:
-        print("Error: TOKEN tidak ditemukan!")
-    else:
-        app = ApplicationBuilder().token(TOKEN).build()
+    try:
+        res = requests.get(f"https://{NBA_HOST}/games", headers=headers, params=params, timeout=10)
+        data = res.json()
+        games = data.get('response', [])
         
-        app.add_handler(CommandHandler('start', start))
-        app.add_handler(CommandHandler('nba_today', nba_today))
-        app.add_handler(CommandHandler('nba_tomorrow', nba_tomorrow))
-        
-        print("Bot NBA Running...")
-        app.run_polling()
+        if not games:
+            return await update.message.reply_text(f"ℹ️ Tidak ada jadwal NBA untuk {target_date}.")
+
+        pesan = f"🏀 *NBA {target_date}:*\n\n"
+        for g in games[:10]:
+            pesan += f"🔥 {g['teams']['visitors']['name']} vs {g['teams']['home']['name']}\n"
+        await update.message.reply_text(pesan, parse_mode='Markdown')
+    except:
+        await update.message.reply_text("⚠️ Gagal mengambil data NBA.")
+
+# --- FUNGSI JADWAL BOLA ---
+async def get_bola(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    target_date = datetime.datetime.now().strftime('%Y-%m-%d')
+    headers = {"X-RapidAPI-Key": API_KEY, "X-RapidAPI-Host": FOOTBALL_HOST}
+    
+    # ID Liga: 39 (EPL), 140 (La Liga), 135 (Serie A), 78 (Bundesliga)
+    leagues = [39, 140, 135, 78] 
+    
+    await update.message.reply_text(f"⏳ Mencari jadwal Bola {target_date}...")
+    
+    pesan = f"⚽ *Jadwal Bola Top Eropa ({target_date}):*\n\n"
+    found = False
+
+    try:
+        for league_id in leagues:
+            # Musim 2025 sesuai tahun sekarang
+            params = {"date": target_date, "league": league_id, "season": "2025"} 
+            res = requests.get(f"https://{FOOTBALL_HOST}/fixtures", headers=headers, params=params, timeout=10)
+            data = res.json()
+            fixtures = data.get('response', [])
+            
+            if fixtures:
+                found = True
+                league_name = fixtures[0]['league']['name']
+                pesan += f"🏆 *{league_name}*\n"
+                for f in fixtures[:5]:
+                    home = f['teams']['home']['name']
+                    away = f['teams']['away']['name']
+                    time = f['fixture']['date'][11:16] # Jam tanding
+                    pesan += f"⏰ {time} - {home} vs {away}\n"
+                pesan += "────────────────────\n"
+
+        if not found:
+            await update.message.reply_text("ℹ️ Tidak ada jadwal Liga Top Eropa hari ini.")
+        else:
+            await update.message.reply_text(pesan, parse_mode='Markdown')
+    except Exception as e:
+        await update.message.reply_text("⚠️ Gagal ambil data bola. Pastikan sudah klik SUBSCRIBE di API-Football!")
+
+if __name__ == '__main__':
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler('start', start))
+    app.add_handler(CommandHandler('jadwal', get_nba))
+    app.add_handler(CommandHandler('bola', get_bola))
+    
+    print("🚀 Bot NBA & BOLA Aktif!")
+    app.run_polling(drop_pending_updates=True)
         
