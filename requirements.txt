@@ -1,5 +1,0 @@
-nba_api
-pandas
-requests
-python-telegram-bot
-pytz
